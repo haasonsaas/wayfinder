@@ -30,6 +30,14 @@ export interface AdeptConfig {
   defaultProvider: 'openai' | 'anthropic';
   enabledIntegrations: string[];
   maxToolSteps: number;
+  slack: {
+    botToken: string;
+    signingSecret: string;
+    appToken: string;
+  };
+  openaiApiKey?: string;
+  anthropicApiKey?: string;
+  oauthServerEnabled: boolean;
 }
 
 export const MessageSchema = z.object({

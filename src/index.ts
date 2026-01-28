@@ -24,16 +24,16 @@ const bootstrap = async () => {
   const config = loadConfig();
   console.log(`[Adept] Starting with provider: ${config.defaultProvider}`);
 
-  const shouldStartOAuth = process.env.OAUTH_SERVER_ENABLED !== 'false';
+  const shouldStartOAuth = config.oauthServerEnabled;
   if (shouldStartOAuth) {
     startOAuthServer();
   }
 
   // Initialize Slack app with Socket Mode
   const app = new App({
-    token: process.env.SLACK_BOT_TOKEN,
-    signingSecret: process.env.SLACK_SIGNING_SECRET,
-    appToken: process.env.SLACK_APP_TOKEN,
+    token: config.slack.botToken,
+    signingSecret: config.slack.signingSecret,
+    appToken: config.slack.appToken,
     socketMode: true,
     logLevel: LogLevel.INFO,
   });

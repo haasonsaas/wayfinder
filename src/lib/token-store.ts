@@ -160,7 +160,6 @@ export class TokenStore {
     if (!this.cache) {
       return;
     }
-
     await fs.mkdir(path.dirname(this.storePath), { recursive: true });
     const payload = this.secret ? await encryptPayload(this.cache, this.secret) : this.cache;
     await fs.writeFile(this.storePath, JSON.stringify(payload, null, 2));

@@ -7,7 +7,7 @@ import { loadConfig } from './config.js';
 import { integrationRegistry } from '../integrations/registry.js';
 import { isToolErrorResponse } from './errors.js';
 
-const SYSTEM_INSTRUCTIONS = `You are Adept, an AI assistant for business operations. You help teams work faster by:
+const buildSystemInstructions = () => `You are Adept, an AI assistant for business operations. You help teams work faster by:
 - Answering questions using data from connected business systems
 - Executing workflows across multiple tools  
 - Providing insights without users needing to open separate apps
@@ -27,15 +27,70 @@ When asked about a person, company, or deal:
 
 You have access to tools from connected integrations. Use them proactively to gather context.`;
 
-function getModel() {
-  const config = loadConfig();
+const formatToolNames = (toolNames: string[]): string | null => {
+  const unique = Array.from(
+    new Set(toolNames.map((toolName) => toolName.replace(/_/g, ' ')).filter(Boolean)),
+  );
+  if (unique.length === 0) {
+    return null;
+  }
+  return unique.length === 1 ? unique[0] : unique.join(', ');
+};
 
-  if (config.defaultProvider === 'anthropic' && process.env.ANTHROPIC_API_KEY) {
-    return anthropic('claude-opus-4-5');
+const updateToolStatus = async (
+  toolCalls: Array<{ toolName: string }> | undefined,
+  toolResults: Array<{ toolName: string; result?: unknown }> | undefined,
+  onStatusUpdate?: (status: string) => Promise<void>,
+): Promise<void> => {
+  if (!onStatusUpdate) {
+    return;
   }
 
-  if (process.env.OPENAI_API_KEY) {
-    return openai('gpt-4.1');
+  if (toolCalls && toolCalls.length > 0) {
+    const toolLabel = formatToolNames(toolCalls.map((toolCall) => toolCall.toolName));
+    if (toolLabel) {
+      await onStatusUpdate(`Using ${toolLabel}...`);
+    }
+  }
+
+  if (toolResults && toolResults.length > 0) {
+    const errorTools = toolResults
+      .filter((toolResult) => {
+        const candidate = toolResult as { result?: unknown };
+        return isToolErrorResponse(candidate.result);
+      })
+      .map((toolResult) => toolResult.toolName);
+
+    const errorLabel = formatToolNames(errorTools);
+    if (errorLabel) {
+      await onStatusUpdate(`Tool error in ${errorLabel}.`);
+    }
+  }
+};
+
+function getModel() {
+  const config = loadConfig();
+  const hasAnthropic = !!config.anthropicApiKey;
+  const hasOpenAI = !!config.openaiApiKey;
+
+  if (config.defaultProvider === 'anthropic') {
+    if (hasAnthropic) {
+      return anthropic('claude-opus-4-5');
+    }
+    if (hasOpenAI) {
+      console.warn('[Adept] DEFAULT_AI_PROVIDER=anthropic but ANTHROPIC_API_KEY is missing. Falling back to OpenAI.');
+      return openai('gpt-4.1');
+    }
+  }
+
+  if (config.defaultProvider === 'openai') {
+    if (hasOpenAI) {
+      return openai('gpt-4.1');
+    }
+    if (hasAnthropic) {
+      console.warn('[Adept] DEFAULT_AI_PROVIDER=openai but OPENAI_API_KEY is missing. Falling back to Anthropic.');
+      return anthropic('claude-opus-4-5');
+    }
   }
 
   throw new Error('No AI provider configured');
@@ -84,26 +139,12 @@ export async function generateResponse(
 
   const { text } = await generateText({
     model,
-    system: SYSTEM_INSTRUCTIONS,
+    system: buildSystemInstructions(),
     prompt,
     tools,
     stopWhen: stepCountIs(config.maxToolSteps),
     onStepFinish: async ({ toolCalls, toolResults }) => {
-      if (toolCalls && toolCalls.length > 0 && onStatusUpdate) {
-        const toolName = toolCalls[0].toolName.replace(/_/g, ' ');
-        await onStatusUpdate(`Using ${toolName}...`);
-      }
-
-      if (toolResults && toolResults.length > 0 && onStatusUpdate) {
-        const errorResult = toolResults.find((toolResult) => {
-          const candidate = toolResult as { result?: unknown };
-          return isToolErrorResponse(candidate.result);
-        });
-        if (errorResult) {
-          const toolName = (errorResult as { toolName: string }).toolName.replace(/_/g, ' ');
-          await onStatusUpdate(`Tool error in ${toolName}.`);
-        }
-      }
+      await updateToolStatus(toolCalls, toolResults, onStatusUpdate);
     },
   });
 
@@ -123,7 +164,7 @@ export async function generateResponseWithHistory(
 
   const { text } = await generateText({
     model,
-    system: SYSTEM_INSTRUCTIONS,
+    system: buildSystemInstructions(),
     messages: messages.map((m) => ({
       role: m.role,
       content: m.content,
@@ -131,21 +172,7 @@ export async function generateResponseWithHistory(
     tools,
     stopWhen: stepCountIs(config.maxToolSteps),
     onStepFinish: async ({ toolCalls, toolResults }) => {
-      if (toolCalls && toolCalls.length > 0 && onStatusUpdate) {
-        const toolName = toolCalls[0].toolName.replace(/_/g, ' ');
-        await onStatusUpdate(`Using ${toolName}...`);
-      }
-
-      if (toolResults && toolResults.length > 0 && onStatusUpdate) {
-        const errorResult = toolResults.find((toolResult) => {
-          const candidate = toolResult as { result?: unknown };
-          return isToolErrorResponse(candidate.result);
-        });
-        if (errorResult) {
-          const toolName = (errorResult as { toolName: string }).toolName.replace(/_/g, ' ');
-          await onStatusUpdate(`Tool error in ${toolName}.`);
-        }
-      }
+      await updateToolStatus(toolCalls, toolResults, onStatusUpdate);
     },
   });
 
