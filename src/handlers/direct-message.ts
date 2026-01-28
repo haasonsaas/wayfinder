@@ -1,13 +1,8 @@
 import { generateResponse, generateResponseWithHistory } from '../lib/agent.js';
-import {
-  getThreadMessages,
-  postMessage,
-  setAssistantStatus,
-  setSuggestedPrompts,
-  getBotUserId,
-} from '../lib/slack.js';
+import { slackService } from '../lib/slack.js';
 import { handleCommand, getOnboardingResponse } from '../lib/commands.js';
 import type { AssistantThreadStartedEvent, DirectMessageEvent } from '../types/slack.js';
+import { logger } from '../lib/logger.js';
 
 export async function handleDirectMessage(event: DirectMessageEvent): Promise<void> {
   const { channel, thread_ts, ts, text, bot_id, subtype } = event;
@@ -17,13 +12,13 @@ export async function handleDirectMessage(event: DirectMessageEvent): Promise<vo
     return;
   }
 
-  const botUserId = await getBotUserId();
+  const botUserId = await slackService.getBotUserId();
   const threadTs = thread_ts || ts;
 
-  console.log(`[DM] Received message in ${channel}, thread: ${threadTs}`);
+  logger.info({ channel, threadTs }, '[DM] Received message');
 
   const updateStatus = async (status: string) => {
-    await setAssistantStatus(channel, threadTs, status);
+    await slackService.setAssistantStatus(channel, threadTs, status);
   };
 
   try {
@@ -33,39 +28,50 @@ export async function handleDirectMessage(event: DirectMessageEvent): Promise<vo
 
     const commandResponse = text ? await handleCommand(text) : null;
     if (commandResponse) {
-      await postMessage(channel, commandResponse.text, threadTs, commandResponse.blocks);
+      await slackService.postMessage(
+        channel,
+        commandResponse.text,
+        threadTs,
+        commandResponse.blocks,
+      );
       await updateStatus('');
       return;
     }
 
     if (thread_ts) {
       // Get thread context
-      const messages = await getThreadMessages(channel, thread_ts, botUserId);
+      const messages = await slackService.getThreadMessages(channel, thread_ts, botUserId);
       response = await generateResponseWithHistory(messages, updateStatus);
     } else {
       // New conversation
       response = await generateResponse(text || '', updateStatus);
     }
 
-    await postMessage(channel, response, threadTs);
+    await slackService.postMessage(channel, response, threadTs);
     await updateStatus('');
   } catch (error) {
-    console.error('[DM] Error generating response:', error);
-    await postMessage(channel, '_Sorry, I encountered an error processing your request._', threadTs);
+    logger.error({ error, channel, threadTs }, '[DM] Error generating response');
+    await slackService.postMessage(
+      channel,
+      '_Sorry, I encountered an error processing your request._',
+      threadTs,
+    );
     await updateStatus('');
   }
 }
 
-export async function handleAssistantThreadStarted(event: AssistantThreadStartedEvent): Promise<void> {
+export async function handleAssistantThreadStarted(
+  event: AssistantThreadStartedEvent,
+): Promise<void> {
   const { channel_id, thread_ts } = event.assistant_thread;
 
-  console.log(`[Assistant] Thread started in ${channel_id}`);
+  logger.info({ channelId: channel_id, threadTs: thread_ts }, '[Assistant] Thread started');
 
   const onboarding = await getOnboardingResponse();
 
-  await postMessage(channel_id, onboarding.text, thread_ts, onboarding.blocks);
+  await slackService.postMessage(channel_id, onboarding.text, thread_ts, onboarding.blocks);
 
-  await setSuggestedPrompts(channel_id, thread_ts, [
+  await slackService.setSuggestedPrompts(channel_id, thread_ts, [
     {
       title: 'Prep for a call',
       message: 'Pull a Salesforce briefing on Acme Corp and summarize open opportunities.',

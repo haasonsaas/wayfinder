@@ -1,5 +1,4 @@
 import 'dotenv/config';
-import { App, LogLevel } from '@slack/bolt';
 import { validateEnv, loadConfig } from './lib/config.js';
 import { tokenStore } from './lib/token-store.js';
 import { startOAuthServer } from './lib/oauth-server.js';
@@ -11,6 +10,8 @@ import {
   isAssistantThreadStartedEvent,
   isDirectMessageEvent,
 } from './types/slack.js';
+import { slackService } from './lib/slack.js';
+import { logger } from './lib/logger.js';
 
 const bootstrap = async () => {
   // Validate environment before starting
@@ -22,7 +23,7 @@ const bootstrap = async () => {
   registerAllIntegrations();
 
   const config = loadConfig();
-  console.log(`[Adept] Starting with provider: ${config.defaultProvider}`);
+  logger.info(`[Adept] Starting with provider: ${config.defaultProvider}`);
 
   const shouldStartOAuth = config.oauthServerEnabled;
   if (shouldStartOAuth) {
@@ -30,13 +31,7 @@ const bootstrap = async () => {
   }
 
   // Initialize Slack app with Socket Mode
-  const app = new App({
-    token: config.slack.botToken,
-    signingSecret: config.slack.signingSecret,
-    appToken: config.slack.appToken,
-    socketMode: true,
-    logLevel: LogLevel.INFO,
-  });
+  const app = slackService.init();
 
   // Handle @mentions in channels
   app.event('app_mention', async ({ event }) => {
@@ -46,7 +41,7 @@ const bootstrap = async () => {
       }
       await handleAppMention(event);
     } catch (error) {
-      console.error('[Adept] Error handling app_mention:', error);
+      logger.error({ error }, '[Adept] Error handling app_mention');
     }
   });
 
@@ -62,7 +57,7 @@ const bootstrap = async () => {
       try {
         await handleDirectMessage(msg);
       } catch (error) {
-        console.error('[Adept] Error handling DM:', error);
+        logger.error({ error }, '[Adept] Error handling DM');
       }
     }
   });
@@ -75,16 +70,16 @@ const bootstrap = async () => {
       }
       await handleAssistantThreadStarted(event);
     } catch (error) {
-      console.error('[Adept] Error handling assistant_thread_started:', error);
+      logger.error({ error }, '[Adept] Error handling assistant_thread_started');
     }
   });
 
   await app.start();
-  console.log('[Adept] Bot is running!');
-  console.log('[Adept] Mention @Adept in any channel or send a DM to get started.');
+  logger.info('[Adept] Bot is running!');
+  logger.info('[Adept] Mention @Adept in any channel or send a DM to get started.');
 };
 
 bootstrap().catch((error) => {
-  console.error('[Adept] Failed to start:', error);
+  logger.fatal({ error }, '[Adept] Failed to start');
   process.exit(1);
 });

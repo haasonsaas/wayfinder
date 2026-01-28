@@ -9,6 +9,7 @@ import { withRetry } from '../lib/retry.js';
 import type { SearchResult } from '../types/index.js';
 
 import { loadConfig } from '../lib/config.js';
+import { logger } from '../lib/logger.js';
 
 const DEFAULT_LOGIN_URL = 'https://login.salesforce.com';
 const TOKEN_TTL_MS = 45 * 60 * 1000;
@@ -465,7 +466,7 @@ export class SalesforceIntegration extends BaseIntegration {
 
       return [...contactResults, ...opportunityResults];
     } catch (error) {
-      console.error('[Salesforce] Search error:', error);
+      logger.error({ error }, '[Salesforce] Search error');
       return [];
     }
   }

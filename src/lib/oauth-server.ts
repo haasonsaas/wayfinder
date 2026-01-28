@@ -2,6 +2,7 @@ import http from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { integrationRegistry } from '../integrations/registry.js';
 import { loadConfig } from './config.js';
+import { logger } from './logger.js';
 
 const STATE_TTL_MS = 10 * 60 * 1000;
 
@@ -121,7 +122,11 @@ const handleStart = async (integrationId: string, baseUrl: string, res: http.Ser
     return;
   }
 
-  sendResponse(res, 404, renderHtml('Integration not found', `Integration "${integrationId}" does not support OAuth.`));
+  sendResponse(
+    res,
+    404,
+    renderHtml('Integration not found', `Integration "${integrationId}" does not support OAuth.`),
+  );
 };
 
 const handleCallback = async (
@@ -155,13 +160,28 @@ const handleCallback = async (
     if (integration?.getAuthConfig) {
       const authConfig = integration.getAuthConfig();
       await authConfig.handleCallback(url.searchParams, baseUrl);
-      sendResponse(res, 200, renderHtml(`${integration.name} connected`, `Successfully connected ${integration.name} to Adept.`));
+      sendResponse(
+        res,
+        200,
+        renderHtml(
+          `${integration.name} connected`,
+          `Successfully connected ${integration.name} to Adept.`,
+        ),
+      );
       return;
     }
 
-    sendResponse(res, 404, renderHtml('Integration not found', `Integration "${integrationId}" does not support OAuth.`));
+    sendResponse(
+      res,
+      404,
+      renderHtml('Integration not found', `Integration "${integrationId}" does not support OAuth.`),
+    );
   } catch (err) {
-    sendResponse(res, 500, renderHtml('OAuth error', err instanceof Error ? err.message : String(err)));
+    sendResponse(
+      res,
+      500,
+      renderHtml('OAuth error', err instanceof Error ? err.message : String(err)),
+    );
   }
 };
 
@@ -176,7 +196,11 @@ export const startOAuthServer = () => {
     }
 
     if (!allowRemote && !isLocalAddress(req.socket.remoteAddress)) {
-      sendResponse(res, 403, renderHtml('Forbidden', 'Remote requests are disabled for this OAuth server.'));
+      sendResponse(
+        res,
+        403,
+        renderHtml('Forbidden', 'Remote requests are disabled for this OAuth server.'),
+      );
       return;
     }
 
@@ -184,7 +208,11 @@ export const startOAuthServer = () => {
     const path = url.pathname;
     const parts = path.split('/').filter(Boolean); // ['oauth', 'integrationId', 'action']
 
-    if (parts.length === 3 && parts[0] === 'oauth' && (parts[2] === 'start' || parts[2] === 'callback')) {
+    if (
+      parts.length === 3 &&
+      parts[0] === 'oauth' &&
+      (parts[2] === 'start' || parts[2] === 'callback')
+    ) {
       const integrationId = parts[1];
       const action = parts[2];
 
@@ -203,7 +231,11 @@ export const startOAuthServer = () => {
           return;
         }
       } catch (error) {
-        sendResponse(res, 500, renderHtml('OAuth error', error instanceof Error ? error.message : String(error)));
+        sendResponse(
+          res,
+          500,
+          renderHtml('OAuth error', error instanceof Error ? error.message : String(error)),
+        );
         return;
       }
     }
@@ -212,7 +244,7 @@ export const startOAuthServer = () => {
   });
 
   server.listen(port, bindHost, () => {
-    console.log(`[Adept] OAuth server listening on ${baseUrl}`);
+    logger.info({ baseUrl }, '[Adept] OAuth server listening');
   });
 
   return server;

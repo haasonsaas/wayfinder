@@ -1,12 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { handleAppMention } from '../src/handlers/app-mention.js';
-import * as slack from '../src/lib/slack.js';
+import { slackService } from '../src/lib/slack.js';
 import * as agent from '../src/lib/agent.js';
 import * as commands from '../src/lib/commands.js';
 
-vi.mock('../src/lib/slack.js');
+// Mock the dependencies
+vi.mock('../src/lib/slack.js', () => ({
+  slackService: {
+    getBotUserId: vi.fn(),
+    postMessage: vi.fn(),
+    updateMessage: vi.fn(),
+    getThreadMessages: vi.fn(),
+  },
+}));
 vi.mock('../src/lib/agent.js');
 vi.mock('../src/lib/commands.js');
+vi.mock('../src/lib/logger.js', () => ({
+  logger: {
+    info: vi.fn(),
+    error: vi.fn(),
+  },
+}));
 
 describe('handleAppMention', () => {
   const mockEvent = {
@@ -21,14 +35,14 @@ describe('handleAppMention', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(slack.getBotUserId).mockResolvedValue('U123');
-    vi.mocked(slack.postMessage).mockResolvedValue('ts-thinking');
+    vi.mocked(slackService.getBotUserId).mockResolvedValue('U123');
+    vi.mocked(slackService.postMessage).mockResolvedValue('ts-thinking');
     vi.mocked(commands.handleCommand).mockResolvedValue(null);
   });
 
   it('ignores messages from bots', async () => {
     await handleAppMention({ ...mockEvent, bot_id: 'B123' } as any);
-    expect(slack.postMessage).not.toHaveBeenCalled();
+    expect(slackService.postMessage).not.toHaveBeenCalled();
   });
 
   it('posts thinking message and generates response', async () => {
@@ -36,9 +50,9 @@ describe('handleAppMention', () => {
     
     await handleAppMention(mockEvent as any);
 
-    expect(slack.postMessage).toHaveBeenCalledWith('C123', '_is thinking..._', '123.456');
+    expect(slackService.postMessage).toHaveBeenCalledWith('C123', '_is thinking..._', '123.456');
     expect(agent.generateResponse).toHaveBeenCalledWith('hello', expect.any(Function));
-    expect(slack.updateMessage).toHaveBeenCalledWith('C123', 'ts-thinking', 'Hello there');
+    expect(slackService.updateMessage).toHaveBeenCalledWith('C123', 'ts-thinking', 'Hello there');
   });
 
   it('handles commands', async () => {
@@ -49,7 +63,7 @@ describe('handleAppMention', () => {
 
     await handleAppMention(mockEvent as any);
 
-    expect(slack.updateMessage).toHaveBeenCalledWith('C123', 'ts-thinking', 'Command result', []);
+    expect(slackService.updateMessage).toHaveBeenCalledWith('C123', 'ts-thinking', 'Command result', []);
     expect(agent.generateResponse).not.toHaveBeenCalled();
   });
 
@@ -58,7 +72,7 @@ describe('handleAppMention', () => {
 
     await handleAppMention(mockEvent as any);
 
-    expect(slack.updateMessage).toHaveBeenCalledWith(
+    expect(slackService.updateMessage).toHaveBeenCalledWith(
       'C123',
       'ts-thinking',
       '_Sorry, I encountered an error processing your request._'

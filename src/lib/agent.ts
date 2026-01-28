@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { loadConfig } from './config.js';
 import { integrationRegistry } from '../integrations/registry.js';
 import { isToolErrorResponse } from './errors.js';
+import { logger } from './logger.js';
 
 const buildSystemInstructions = () => `You are Adept, an AI assistant for business operations. You help teams work faster by:
 - Answering questions using data from connected business systems
@@ -78,7 +79,9 @@ function getModel() {
       return anthropic('claude-opus-4-5');
     }
     if (hasOpenAI) {
-      console.warn('[Adept] DEFAULT_AI_PROVIDER=anthropic but ANTHROPIC_API_KEY is missing. Falling back to OpenAI.');
+      logger.warn(
+        '[Adept] DEFAULT_AI_PROVIDER=anthropic but ANTHROPIC_API_KEY is missing. Falling back to OpenAI.',
+      );
       return openai('gpt-4.1');
     }
   }
@@ -88,7 +91,9 @@ function getModel() {
       return openai('gpt-4.1');
     }
     if (hasAnthropic) {
-      console.warn('[Adept] DEFAULT_AI_PROVIDER=openai but OPENAI_API_KEY is missing. Falling back to Anthropic.');
+      logger.warn(
+        '[Adept] DEFAULT_AI_PROVIDER=openai but OPENAI_API_KEY is missing. Falling back to Anthropic.',
+      );
       return anthropic('claude-opus-4-5');
     }
   }

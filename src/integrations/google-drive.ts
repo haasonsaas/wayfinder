@@ -9,6 +9,7 @@ import { withRetry } from '../lib/retry.js';
 import type { SearchResult } from '../types/index.js';
 
 import { loadConfig } from '../lib/config.js';
+import { logger } from '../lib/logger.js';
 
 const MAX_TEXT_CHARS = 20000;
 const MAX_BINARY_BYTES = 1024 * 1024;
@@ -269,7 +270,7 @@ export class GoogleDriveIntegration extends BaseIntegration {
         },
       }));
     } catch (error) {
-      console.error('[Google Drive] Search error:', error);
+      logger.error({ error }, '[Google Drive] Search error');
       return [];
     }
   }

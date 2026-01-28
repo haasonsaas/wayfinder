@@ -2,6 +2,7 @@ import { integrationRegistry } from './registry.js';
 import { SalesforceIntegration } from './salesforce.js';
 import { GitHubIntegration } from './github.js';
 import { GoogleDriveIntegration } from './google-drive.js';
+import { logger } from '../lib/logger.js';
 
 // TODO: Implement dynamic loading if list grows
 const AVAILABLE_INTEGRATIONS = [
@@ -15,12 +16,15 @@ export function registerAllIntegrations(): void {
     try {
       integrationRegistry.register(new IntegrationClass());
     } catch (error) {
-      console.error(`[Integrations] Failed to register integration:`, error);
+      logger.error({ error }, '[Integrations] Failed to register integration');
     }
   }
 
   const enabled = integrationRegistry.getEnabled();
-  console.log(`[Integrations] ${enabled.length} integrations enabled: ${enabled.map((i) => i.name).join(', ')}`);
+  logger.info(
+    { count: enabled.length, enabled: enabled.map((i) => i.name) },
+    '[Integrations] Enabled integrations',
+  );
 }
 
 export { integrationRegistry } from './registry.js';

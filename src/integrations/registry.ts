@@ -1,12 +1,13 @@
 import type { Integration, SearchResult } from '../types/index.js';
 import { loadConfig } from '../lib/config.js';
+import { logger } from '../lib/logger.js';
 
 class IntegrationRegistry {
   private integrations: Map<string, Integration> = new Map();
 
   register(integration: Integration): void {
     this.integrations.set(integration.id, integration);
-    console.log(`[Registry] Registered integration: ${integration.name}`);
+    logger.info({ integration: integration.name }, '[Registry] Registered integration');
   }
 
   get(id: string): Integration | undefined {
@@ -38,7 +39,7 @@ class IntegrationRegistry {
         try {
           return (await integration.search?.(query)) || [];
         } catch (error) {
-          console.error(`[Registry] Search error in ${integration.id}:`, error);
+          logger.error({ error, integration: integration.id }, '[Registry] Search error');
           return [];
         }
       }),

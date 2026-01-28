@@ -1,4 +1,5 @@
 import type { AdeptConfig } from '../types/index.js';
+import { logger } from './logger.js';
 
 const resolveDefaultProvider = (): AdeptConfig['defaultProvider'] => {
   const raw = process.env.DEFAULT_AI_PROVIDER?.toLowerCase();
@@ -7,7 +8,10 @@ const resolveDefaultProvider = (): AdeptConfig['defaultProvider'] => {
   }
 
   if (raw) {
-    console.warn(`[Config] Unknown DEFAULT_AI_PROVIDER "${process.env.DEFAULT_AI_PROVIDER}", defaulting to anthropic.`);
+    logger.warn(
+      { provider: process.env.DEFAULT_AI_PROVIDER },
+      '[Config] Unknown DEFAULT_AI_PROVIDER, defaulting to anthropic',
+    );
   }
 
   return 'anthropic';
@@ -75,10 +79,14 @@ export function validateEnv(): void {
   }
 
   if (config.defaultProvider === 'anthropic' && !hasAnthropic && hasOpenAI) {
-    console.warn('[Config] DEFAULT_AI_PROVIDER=anthropic but ANTHROPIC_API_KEY is missing. Falling back to OpenAI.');
+    logger.warn(
+      '[Config] DEFAULT_AI_PROVIDER=anthropic but ANTHROPIC_API_KEY is missing. Falling back to OpenAI.',
+    );
   }
 
   if (config.defaultProvider === 'openai' && !hasOpenAI && hasAnthropic) {
-    console.warn('[Config] DEFAULT_AI_PROVIDER=openai but OPENAI_API_KEY is missing. Falling back to Anthropic.');
+    logger.warn(
+      '[Config] DEFAULT_AI_PROVIDER=openai but OPENAI_API_KEY is missing. Falling back to Anthropic.',
+    );
   }
 }
