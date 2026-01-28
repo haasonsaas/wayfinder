@@ -8,6 +8,8 @@ import { IntegrationAuthError, IntegrationError, createToolError, toToolError } 
 import { withRetry } from '../lib/retry.js';
 import type { SearchResult } from '../types/index.js';
 
+import { loadConfig } from '../lib/config.js';
+
 const DEFAULT_LOGIN_URL = 'https://login.salesforce.com';
 const TOKEN_TTL_MS = 45 * 60 * 1000;
 const TOKEN_REFRESH_BUFFER_MS = 2 * 60 * 1000;
@@ -252,12 +254,77 @@ export class SalesforceIntegration extends BaseIntegration {
   private client?: SalesforceClient;
   private clientKey?: string;
 
-  isEnabled(): boolean {
-    return Boolean(
-      process.env.SALESFORCE_CLIENT_ID &&
-        process.env.SALESFORCE_CLIENT_SECRET &&
-        (process.env.SALESFORCE_REFRESH_TOKEN || tokenStore.hasTokens(this.id)),
-    );
+  getAuthConfig() {
+    return {
+      getAuthUrl: (baseUrl: string, state: string) => {
+        const config = loadConfig();
+        const loginUrl = (config.salesforce?.loginUrl || DEFAULT_LOGIN_URL).replace(/\/$/, '');
+        const clientId = config.salesforce?.clientId;
+        if (!clientId) {
+          throw new Error('Missing SALESFORCE_CLIENT_ID');
+        }
+
+        const redirectUri = config.salesforce?.redirectUri || `${baseUrl}/oauth/salesforce/callback`;
+
+        const url = new URL(`${loginUrl}/services/oauth2/authorize`);
+        url.searchParams.set('response_type', 'code');
+        url.searchParams.set('client_id', clientId);
+        url.searchParams.set('redirect_uri', redirectUri);
+        url.searchParams.set('scope', 'refresh_token api');
+        url.searchParams.set('state', state);
+        return url.toString();
+      },
+      handleCallback: async (params: URLSearchParams, baseUrl: string) => {
+        const code = params.get('code');
+        if (!code) {
+          throw new Error('Missing authorization code');
+        }
+
+        const config = loadConfig();
+        const redirectUri = config.salesforce?.redirectUri || `${baseUrl}/oauth/salesforce/callback`;
+        const loginUrl = (config.salesforce?.loginUrl || DEFAULT_LOGIN_URL).replace(/\/$/, '');
+        const clientId = config.salesforce?.clientId;
+        const clientSecret = config.salesforce?.clientSecret;
+
+        if (!clientId || !clientSecret) {
+          throw new Error('Missing SALESFORCE_CLIENT_ID or SALESFORCE_CLIENT_SECRET');
+        }
+
+        const body = new URLSearchParams({
+          grant_type: 'authorization_code',
+          client_id: clientId,
+          client_secret: clientSecret,
+          redirect_uri: redirectUri,
+          code,
+        });
+
+        const response = await fetch(`${loginUrl}/services/oauth2/token`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: body.toString(),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Salesforce token exchange failed (${response.status}): ${errorText}`);
+        }
+
+        const data = (await response.json()) as SalesforceTokenResponse;
+
+        if (!data.refresh_token) {
+          throw new Error('Salesforce did not return a refresh token. Ensure refresh_token scope is enabled.');
+        }
+
+        await tokenStore.setTokens(this.id, {
+          accessToken: data.access_token,
+          refreshToken: data.refresh_token,
+          instanceUrl: data.instance_url,
+          issuedAt: data.issued_at,
+          expiresAt: Date.now() + TOKEN_TTL_MS,
+          updatedAt: new Date().toISOString(),
+        });
+      },
+    };
   }
 
   getTools() {
@@ -404,11 +471,12 @@ export class SalesforceIntegration extends BaseIntegration {
   }
 
   private async getClient(): Promise<SalesforceClient> {
-    const clientId = process.env.SALESFORCE_CLIENT_ID;
-    const clientSecret = process.env.SALESFORCE_CLIENT_SECRET;
+    const config = loadConfig();
+    const clientId = config.salesforce?.clientId;
+    const clientSecret = config.salesforce?.clientSecret;
     const storedTokens = await tokenStore.getTokens<SalesforceStoredTokens>(this.id);
     const refreshToken = storedTokens?.refreshToken || process.env.SALESFORCE_REFRESH_TOKEN;
-    const loginUrl = process.env.SALESFORCE_LOGIN_URL || DEFAULT_LOGIN_URL;
+    const loginUrl = config.salesforce?.loginUrl || DEFAULT_LOGIN_URL;
 
     if (!clientId || !clientSecret || !refreshToken) {
       throw new IntegrationAuthError('Salesforce credentials are missing.', {

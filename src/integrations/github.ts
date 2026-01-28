@@ -7,6 +7,8 @@ import { IntegrationAuthError, createToolError, toToolError } from '../lib/error
 import { withRetry } from '../lib/retry.js';
 import type { SearchResult } from '../types/index.js';
 
+import { loadConfig } from '../lib/config.js';
+
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
 const TOKEN_REFRESH_BUFFER_MS = 2 * 60 * 1000;
@@ -42,8 +44,9 @@ const resolveRepo = (repoInput?: string) => {
     }
   }
 
-  const owner = process.env.GITHUB_DEFAULT_OWNER;
-  const repo = process.env.GITHUB_DEFAULT_REPO;
+  const config = loadConfig();
+  const owner = config.github?.defaultOwner;
+  const repo = config.github?.defaultRepo;
   if (owner && repo) {
     return { owner, repo };
   }
@@ -57,8 +60,9 @@ const refreshGitHubToken = async (
   refreshToken: string,
   existing?: GitHubStoredTokens,
 ): Promise<GitHubStoredTokens> => {
-  const clientId = process.env.GITHUB_OAUTH_CLIENT_ID;
-  const clientSecret = process.env.GITHUB_OAUTH_CLIENT_SECRET;
+  const config = loadConfig();
+  const clientId = config.github?.oauthClientId;
+  const clientSecret = config.github?.oauthClientSecret;
 
   if (!clientId || !clientSecret) {
     throw new IntegrationAuthError('GitHub OAuth client credentials are missing.', {
@@ -171,7 +175,8 @@ const resolveAccessToken = async (): Promise<string> => {
 
 const getOctokit = async () => {
   const token = await resolveAccessToken();
-  const baseUrl = process.env.GITHUB_BASE_URL;
+  const config = loadConfig();
+  const baseUrl = config.github?.baseUrl;
   return new Octokit({ auth: token, baseUrl: baseUrl || undefined });
 };
 
@@ -181,8 +186,88 @@ export class GitHubIntegration extends BaseIntegration {
   description = 'Access GitHub repositories, issues, and pull requests';
   icon = '🐙';
 
-  isEnabled(): boolean {
-    return Boolean(process.env.GITHUB_OAUTH_TOKEN || process.env.GITHUB_TOKEN || tokenStore.hasTokens(this.id));
+  getAuthConfig() {
+    return {
+      getAuthUrl: (baseUrl: string, state: string) => {
+        const config = loadConfig();
+        const clientId = config.github?.oauthClientId;
+        if (!clientId) {
+          throw new Error('Missing GITHUB_OAUTH_CLIENT_ID');
+        }
+
+        const redirectUri = config.github?.oauthRedirectUri || `${baseUrl}/oauth/github/callback`;
+        const authBaseUrl = (process.env.GITHUB_OAUTH_BASE_URL || DEFAULT_OAUTH_BASE_URL).replace(/\/$/, '');
+        
+        const url = new URL(`${authBaseUrl}/login/oauth/authorize`);
+        url.searchParams.set('client_id', clientId);
+        url.searchParams.set('redirect_uri', redirectUri);
+        url.searchParams.set('scope', process.env.GITHUB_OAUTH_SCOPES || 'repo read:org read:user');
+        url.searchParams.set('state', state);
+        return url.toString();
+      },
+      handleCallback: async (params: URLSearchParams, baseUrl: string) => {
+        const code = params.get('code');
+        const state = params.get('state');
+        
+        if (!code) {
+          throw new Error('Missing authorization code');
+        }
+
+        const config = loadConfig();
+        const clientId = config.github?.oauthClientId;
+        const clientSecret = config.github?.oauthClientSecret;
+
+        if (!clientId || !clientSecret) {
+          throw new Error('Missing GITHUB_OAUTH_CLIENT_ID or GITHUB_OAUTH_CLIENT_SECRET');
+        }
+
+        const redirectUri = config.github?.oauthRedirectUri || `${baseUrl}/oauth/github/callback`;
+        const authBaseUrl = (process.env.GITHUB_OAUTH_BASE_URL || DEFAULT_OAUTH_BASE_URL).replace(/\/$/, '');
+        
+        const body = new URLSearchParams({
+          client_id: clientId,
+          client_secret: clientSecret,
+          code,
+          redirect_uri: redirectUri,
+          state: state ?? '',
+        });
+
+        const response = await fetch(`${authBaseUrl}/login/oauth/access_token`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            Accept: 'application/json',
+          },
+          body: body.toString(),
+        });
+
+        if (!response.ok) {
+          throw new Error(`GitHub token exchange failed (${response.status})`);
+        }
+
+        const data = (await response.json()) as GitHubRefreshResponse;
+        
+        if (data.error || !data.access_token) {
+           throw new Error(data.error_description || 'GitHub did not return an access token.');
+        }
+
+        const now = Date.now();
+        const expiresAt = data.expires_in ? now + data.expires_in * 1000 : undefined;
+        const refreshTokenExpiresAt = data.refresh_token_expires_in
+          ? now + data.refresh_token_expires_in * 1000
+          : undefined;
+
+        await tokenStore.setTokens(this.id, {
+          accessToken: data.access_token,
+          refreshToken: data.refresh_token,
+          expiresAt,
+          refreshTokenExpiresAt,
+          scope: data.scope,
+          tokenType: data.token_type,
+          updatedAt: new Date().toISOString(),
+        });
+      },
+    };
   }
 
   getTools() {

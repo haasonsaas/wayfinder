@@ -14,6 +14,9 @@ const resolveDefaultProvider = (): AdeptConfig['defaultProvider'] => {
 };
 
 export function loadConfig(): AdeptConfig {
+  const oauthPort = Number(process.env.OAUTH_PORT || 3999);
+  const oauthBaseUrl = process.env.OAUTH_BASE_URL || `http://localhost:${oauthPort}`;
+
   return {
     defaultProvider: resolveDefaultProvider(),
     enabledIntegrations: (process.env.ENABLED_INTEGRATIONS || '').split(',').filter(Boolean),
@@ -26,6 +29,32 @@ export function loadConfig(): AdeptConfig {
     openaiApiKey: process.env.OPENAI_API_KEY,
     anthropicApiKey: process.env.ANTHROPIC_API_KEY,
     oauthServerEnabled: process.env.OAUTH_SERVER_ENABLED !== 'false',
+    oauth: {
+      port: oauthPort,
+      baseUrl: oauthBaseUrl,
+      bindHost: process.env.OAUTH_BIND_HOST || '127.0.0.1',
+      allowRemote: process.env.OAUTH_ALLOW_REMOTE === 'true',
+      sharedSecret: process.env.OAUTH_SHARED_SECRET,
+    },
+    github: {
+      oauthClientId: process.env.GITHUB_OAUTH_CLIENT_ID,
+      oauthClientSecret: process.env.GITHUB_OAUTH_CLIENT_SECRET,
+      oauthRedirectUri: process.env.GITHUB_OAUTH_REDIRECT_URI,
+      defaultOwner: process.env.GITHUB_DEFAULT_OWNER,
+      defaultRepo: process.env.GITHUB_DEFAULT_REPO,
+      baseUrl: process.env.GITHUB_BASE_URL,
+    },
+    salesforce: {
+      clientId: process.env.SALESFORCE_CLIENT_ID,
+      clientSecret: process.env.SALESFORCE_CLIENT_SECRET,
+      loginUrl: process.env.SALESFORCE_LOGIN_URL,
+      redirectUri: process.env.SALESFORCE_REDIRECT_URI,
+    },
+    googleDrive: {
+      clientId: process.env.GOOGLE_DRIVE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_DRIVE_CLIENT_SECRET,
+      redirectUri: process.env.GOOGLE_DRIVE_REDIRECT_URI,
+    },
   };
 }
 

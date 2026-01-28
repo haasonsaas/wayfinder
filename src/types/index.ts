@@ -9,6 +9,12 @@ export interface Integration {
   isEnabled: () => boolean;
   getTools: () => ToolSet;
   search?: (query: string) => Promise<SearchResult[]>;
+  getAuthConfig?: () => IntegrationAuthConfig;
+}
+
+export interface IntegrationAuthConfig {
+  getAuthUrl: (baseUrl: string, state: string) => Promise<string> | string;
+  handleCallback: (params: URLSearchParams, baseUrl: string) => Promise<void>;
 }
 
 export interface SearchResult {
@@ -38,6 +44,32 @@ export interface AdeptConfig {
   openaiApiKey?: string;
   anthropicApiKey?: string;
   oauthServerEnabled: boolean;
+  oauth: {
+    port: number;
+    baseUrl: string;
+    bindHost: string;
+    allowRemote: boolean;
+    sharedSecret?: string;
+  };
+  github?: {
+    oauthClientId?: string;
+    oauthClientSecret?: string;
+    oauthRedirectUri?: string;
+    defaultOwner?: string;
+    defaultRepo?: string;
+    baseUrl?: string;
+  };
+  salesforce?: {
+    clientId?: string;
+    clientSecret?: string;
+    loginUrl?: string;
+    redirectUri?: string;
+  };
+  googleDrive?: {
+    clientId?: string;
+    clientSecret?: string;
+    redirectUri?: string;
+  };
 }
 
 export const MessageSchema = z.object({

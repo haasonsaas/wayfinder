@@ -8,6 +8,8 @@ import { IntegrationAuthError, createToolError, toToolError } from '../lib/error
 import { withRetry } from '../lib/retry.js';
 import type { SearchResult } from '../types/index.js';
 
+import { loadConfig } from '../lib/config.js';
+
 const MAX_TEXT_CHARS = 20000;
 const MAX_BINARY_BYTES = 1024 * 1024;
 const AUTH_HINT = 'Run "oauth status" in Slack to review Google Drive connection links.';
@@ -136,13 +138,61 @@ export class GoogleDriveIntegration extends BaseIntegration {
   private client?: DriveClient;
   private clientKey?: string;
 
-  isEnabled(): boolean {
-    return Boolean(
-      process.env.GOOGLE_DRIVE_CLIENT_ID &&
-        process.env.GOOGLE_DRIVE_CLIENT_SECRET &&
-        process.env.GOOGLE_DRIVE_REDIRECT_URI &&
-        (process.env.GOOGLE_DRIVE_REFRESH_TOKEN || tokenStore.hasTokens(this.id)),
-    );
+  getAuthConfig() {
+    return {
+      getAuthUrl: (baseUrl: string, state: string) => {
+        const config = loadConfig();
+        const clientId = config.googleDrive?.clientId;
+        const clientSecret = config.googleDrive?.clientSecret;
+        if (!clientId || !clientSecret) {
+          throw new Error('Missing GOOGLE_DRIVE_CLIENT_ID or GOOGLE_DRIVE_CLIENT_SECRET');
+        }
+
+        const redirectUri = config.googleDrive?.redirectUri || `${baseUrl}/oauth/google-drive/callback`;
+
+        const oauth = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+        return oauth.generateAuthUrl({
+          access_type: 'offline',
+          prompt: 'consent',
+          scope: [
+            'https://www.googleapis.com/auth/drive.readonly',
+            'https://www.googleapis.com/auth/drive.metadata.readonly',
+          ],
+          state,
+        });
+      },
+      handleCallback: async (params: URLSearchParams, baseUrl: string) => {
+        const code = params.get('code');
+        if (!code) {
+          throw new Error('Missing authorization code');
+        }
+
+        const config = loadConfig();
+        const clientId = config.googleDrive?.clientId;
+        const clientSecret = config.googleDrive?.clientSecret;
+        if (!clientId || !clientSecret) {
+          throw new Error('Missing GOOGLE_DRIVE_CLIENT_ID or GOOGLE_DRIVE_CLIENT_SECRET');
+        }
+
+        const redirectUri = config.googleDrive?.redirectUri || `${baseUrl}/oauth/google-drive/callback`;
+
+        const oauth = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+        const { tokens } = await oauth.getToken(code);
+
+        if (!tokens.refresh_token) {
+           throw new Error('Google did not return a refresh token. Revoke access and retry with prompt=consent.');
+        }
+
+        await tokenStore.setTokens(this.id, {
+          accessToken: tokens.access_token,
+          refreshToken: tokens.refresh_token,
+          scope: tokens.scope,
+          expiryDate: tokens.expiry_date,
+          tokenType: tokens.token_type,
+          updatedAt: new Date().toISOString(),
+        });
+      },
+    };
   }
 
   getTools() {
@@ -225,9 +275,10 @@ export class GoogleDriveIntegration extends BaseIntegration {
   }
 
   private async getClient(): Promise<DriveClient> {
-    const clientId = process.env.GOOGLE_DRIVE_CLIENT_ID;
-    const clientSecret = process.env.GOOGLE_DRIVE_CLIENT_SECRET;
-    const redirectUri = process.env.GOOGLE_DRIVE_REDIRECT_URI;
+    const config = loadConfig();
+    const clientId = config.googleDrive?.clientId;
+    const clientSecret = config.googleDrive?.clientSecret;
+    const redirectUri = config.googleDrive?.redirectUri;
     const stored = await tokenStore.getTokens<DriveStoredTokens>(this.id);
     const refreshToken = stored?.refreshToken || process.env.GOOGLE_DRIVE_REFRESH_TOKEN;
 

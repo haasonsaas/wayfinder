@@ -1,27 +1,30 @@
 import { App, LogLevel } from '@slack/bolt';
 import { WebClient } from '@slack/web-api';
 import type { KnownBlock } from '@slack/web-api';
+import { loadConfig } from './config.js';
 
 let app: App;
 let webClient: WebClient;
 
 export function initSlack(): App {
+  const config = loadConfig();
   app = new App({
-    token: process.env.SLACK_BOT_TOKEN,
-    signingSecret: process.env.SLACK_SIGNING_SECRET,
-    appToken: process.env.SLACK_APP_TOKEN,
+    token: config.slack.botToken,
+    signingSecret: config.slack.signingSecret,
+    appToken: config.slack.appToken,
     socketMode: true,
     logLevel: LogLevel.INFO,
   });
 
-  webClient = new WebClient(process.env.SLACK_BOT_TOKEN);
+  webClient = new WebClient(config.slack.botToken);
 
   return app;
 }
 
 export function getWebClient(): WebClient {
   if (!webClient) {
-    webClient = new WebClient(process.env.SLACK_BOT_TOKEN);
+    const config = loadConfig();
+    webClient = new WebClient(config.slack.botToken);
   }
   return webClient;
 }

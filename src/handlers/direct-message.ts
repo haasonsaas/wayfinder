@@ -61,7 +61,7 @@ export async function handleAssistantThreadStarted(event: AssistantThreadStarted
 
   console.log(`[Assistant] Thread started in ${channel_id}`);
 
-  const onboarding = getOnboardingResponse();
+  const onboarding = await getOnboardingResponse();
 
   await postMessage(channel_id, onboarding.text, thread_ts, onboarding.blocks);
 
