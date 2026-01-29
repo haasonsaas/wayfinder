@@ -52,7 +52,11 @@ describe('handleAppMention', () => {
     await handleAppMention(mockEvent as any);
 
     expect(slackService.postMessage).toHaveBeenCalledWith('C123', '_is thinking..._', '123.456');
-    expect(agent.generateResponse).toHaveBeenCalledWith('hello', expect.any(Function));
+    expect(agent.generateResponse).toHaveBeenCalledWith('hello', expect.any(Function), {
+      userId: 'U456',
+      channelId: 'C123',
+      threadTs: '123.456',
+    });
     expect(slackService.updateMessage).toHaveBeenCalledWith('C123', 'ts-thinking', 'Hello there');
   });
 

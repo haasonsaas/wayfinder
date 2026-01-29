@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { BaseIntegration } from './base.js';
 import { integrationRegistry } from './registry.js';
 import { logger } from '../lib/logger.js';
+import { toolRegistry } from '../lib/tool-registry.js';
+import { userToolsManager } from '../lib/user-tools.js';
 
 const EXCLUDED_MODULES = new Set(['index', 'base', 'registry']);
 const VALID_EXTENSIONS = new Set(['.ts', '.js']);
@@ -64,6 +66,24 @@ export async function registerAllIntegrations(): Promise<void> {
   }
 
   const enabled = integrationRegistry.getEnabled();
+
+  for (const integration of enabled) {
+    const tools = integration.getTools();
+    for (const [toolName, toolDef] of Object.entries(tools)) {
+      const qualifiedName = `${integration.id}_${toolName}`;
+      await toolRegistry.registerTool(qualifiedName, integration.id, toolDef);
+    }
+  }
+
+  await userToolsManager.loadAllTools();
+
+  for (const integration of enabled) {
+    const candidate = integration as { loadStoredTools?: () => Promise<void> };
+    if (typeof candidate.loadStoredTools === 'function') {
+      await candidate.loadStoredTools();
+    }
+  }
+
   logger.info(
     { count: enabled.length, enabled: enabled.map((i) => i.name) },
     '[Integrations] Enabled integrations',

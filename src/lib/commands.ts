@@ -8,6 +8,11 @@ import { buildOAuthStartUrl, buildSharedSecretParam, getOAuthBaseUrl } from './o
 import { getIntegrationHealth } from './integration-config.js';
 import { workflowWizard } from './workflows/wizard.js';
 import { workflowService } from './workflows/service.js';
+import { toolRegistry } from './tool-registry.js';
+import { toolStorage } from './tool-storage.js';
+import { auditLogger } from './audit-log.js';
+import { outcomeMonitor } from './outcome-monitor.js';
+import { approvalGates } from './approval-gates.js';
 
 const getOAuthStartUrl = async (integrationId: string): Promise<string | null> => {
   const integration = integrationRegistry.get(integrationId);
@@ -220,6 +225,182 @@ commandRegistry.register({
     }
 
     return { text: 'Unknown schedule command. Use "schedule", "schedule list", or "schedule delete <id>".' };
+  },
+});
+
+// Tool management commands
+commandRegistry.register({
+  name: 'tools',
+  description: 'Manage tools',
+  execute: async (args) => {
+    const parts = args.trim().split(/\s+/);
+    const subcommand = parts[0] || 'list';
+
+    if (subcommand === 'list') {
+      const integrationId = parts[1];
+      const tools = toolRegistry.listTools(integrationId);
+      
+      if (tools.length === 0) {
+        return { text: integrationId ? `No tools found for ${integrationId}.` : 'No tools registered.' };
+      }
+
+      const lines = tools.slice(0, 20).map((t) => 
+        `• *${t.name}* (${t.integrationId}) - ${t.description.slice(0, 60)}${t.isHot ? ' [HOT]' : ''}`,
+      );
+      
+      return {
+        text: `*Registered Tools* (${tools.length} total)\n${lines.join('\n')}`,
+      };
+    }
+
+    if (subcommand === 'search') {
+      const query = parts.slice(1).join(' ');
+      if (!query) {
+        return { text: 'Usage: tools search <query>' };
+      }
+
+      const results = toolRegistry.searchTools(query, 10);
+      if (results.length === 0) {
+        return { text: `No tools found matching "${query}".` };
+      }
+
+      const lines = results.map((t) =>
+        `• *${t.qualifiedName}* - ${t.description.slice(0, 60)}`,
+      );
+
+      return { text: `*Search Results for "${query}"*\n${lines.join('\n')}` };
+    }
+
+    if (subcommand === 'stats') {
+      const stats = toolRegistry.getStats();
+      const storageStats = await toolStorage.getStats();
+
+      return {
+        text: [
+          '*Tool Statistics*',
+          `Total tools: ${stats.totalTools}`,
+          `Hot tools: ${stats.hotTools}`,
+          `Deferred tools: ${stats.deferredTools}`,
+          `User-defined tools: ${storageStats.totalTools}`,
+          '',
+          '*By Integration:*',
+          ...Object.entries(stats.byIntegration).map(([id, count]) => `• ${id}: ${count}`),
+        ].join('\n'),
+      };
+    }
+
+    if (subcommand === 'hot') {
+      const hotTools = toolRegistry.listTools().filter((t) => t.isHot);
+      
+      if (hotTools.length === 0) {
+        return { text: 'No hot tools currently.' };
+      }
+
+      const lines = hotTools.map((t) =>
+        `• *${t.name}* (${t.integrationId}) - ${t.usageCount} uses`,
+      );
+
+      return { text: `*Hot Tools* (always loaded)\n${lines.join('\n')}` };
+    }
+
+    return { text: 'Usage: tools [list|search|stats|hot] [args]' };
+  },
+});
+
+// Audit and monitoring commands
+commandRegistry.register({
+  name: 'audit',
+  description: 'View audit logs',
+  execute: async (args, context) => {
+    const parts = args.trim().split(/\s+/);
+    const tool = parts[0];
+    const days = parseInt(parts[1] || '7', 10);
+
+    const stats = await auditLogger.getStats({
+      userId: context.userId,
+      days: Math.min(days, 30),
+    });
+
+    const lines = [
+      `*Audit Summary* (last ${days} days)`,
+      `Total actions: ${stats.totalActions}`,
+      `Success rate: ${(stats.successRate * 100).toFixed(1)}%`,
+      `Avg duration: ${stats.avgDuration.toFixed(0)}ms`,
+      '',
+      '*By Action:*',
+      ...Object.entries(stats.byAction).map(([action, count]) => `• ${action}: ${count}`),
+    ];
+
+    if (tool) {
+      lines.push('', `*Tool filter: ${tool}*`);
+    }
+
+    return { text: lines.join('\n') };
+  },
+});
+
+commandRegistry.register({
+  name: 'metrics',
+  description: 'View tool metrics',
+  execute: async (args) => {
+    const tool = args.trim();
+
+    if (tool) {
+      const parts = tool.split('_');
+      const integrationId = parts[0];
+      const metrics = await outcomeMonitor.getMetrics(tool, integrationId, 'day');
+      
+      if (!metrics) {
+        return { text: `No metrics found for ${tool}.` };
+      }
+
+      return {
+        text: [
+          `*Metrics for ${tool}*`,
+          `Total calls: ${metrics.totalCalls}`,
+          `Success: ${metrics.successCount} | Failures: ${metrics.failureCount}`,
+          `Avg duration: ${metrics.avgDuration.toFixed(0)}ms`,
+          `P95 duration: ${metrics.p95Duration.toFixed(0)}ms`,
+        ].join('\n'),
+      };
+    }
+
+    const failing = await outcomeMonitor.getTopFailingTools(5);
+    const slow = await outcomeMonitor.getSlowestTools(5);
+
+    const lines = ['*Tool Metrics Overview*', '', '*Top Failing:*'];
+    for (const t of failing) {
+      lines.push(`• ${t.tool}: ${(t.failureRate * 100).toFixed(1)}% failure rate`);
+    }
+
+    lines.push('', '*Slowest:*');
+    for (const t of slow) {
+      lines.push(`• ${t.tool}: p95 ${t.p95Duration.toFixed(0)}ms`);
+    }
+
+    return { text: lines.join('\n') };
+  },
+});
+
+commandRegistry.register({
+  name: 'approvals',
+  description: 'View pending approvals',
+  execute: async (_, context) => {
+    const pending = await approvalGates.listPending(context.teamId);
+
+    if (pending.length === 0) {
+      return { text: 'No pending approvals.' };
+    }
+
+    const lines = ['*Pending Approvals*', ''];
+    for (const gate of pending) {
+      lines.push(
+        `• *${gate.tool}* requested by <@${gate.requestedBy}>`,
+        `  ID: ${gate.id.slice(0, 8)}... | Expires: ${new Date(gate.expiresAt).toLocaleString()}`,
+      );
+    }
+
+    return { text: lines.join('\n') };
   },
 });
 

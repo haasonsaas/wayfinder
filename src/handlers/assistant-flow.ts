@@ -47,8 +47,8 @@ export const runAssistantFlow = async (options: AssistantFlowOptions): Promise<v
 
     const response =
       threadTs && getThreadMessages
-        ? await generateResponseWithHistory(await getThreadMessages(), onStatusUpdate)
-        : await generateResponse(text, onStatusUpdate);
+        ? await generateResponseWithHistory(await getThreadMessages(), onStatusUpdate, commandContext)
+        : await generateResponse(text, onStatusUpdate, commandContext);
 
     await sendResponse(response);
   } catch (error) {

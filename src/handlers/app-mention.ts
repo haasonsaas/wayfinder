@@ -30,7 +30,15 @@ export async function handleAppMention(event: AppMentionEvent): Promise<void> {
     logger.warn({ channel, threadTs }, '[AppMention] Proceeding without thinking message');
     try {
       const response = await import('../lib/agent.js').then((m) =>
-        m.generateResponse(text.replace(new RegExp(`<@${botUserId}>\\s*`, 'g'), '').trim()),
+        m.generateResponse(
+          text.replace(new RegExp(`<@${botUserId}>\\s*`, 'g'), '').trim(),
+          undefined,
+          {
+            userId: user,
+            channelId: channel,
+            threadTs: threadTs || ts,
+          },
+        ),
       );
       await slackService.postMessage(channel, response, threadTs);
     } catch (fallbackError) {
