@@ -61,6 +61,11 @@ const buildConfig = (): AdeptConfig => {
       clientSecret: process.env.GOOGLE_DRIVE_CLIENT_SECRET,
       redirectUri: process.env.GOOGLE_DRIVE_REDIRECT_URI,
     },
+    daytona: {
+      apiKey: process.env.DAYTONA_API_KEY,
+      apiUrl: process.env.DAYTONA_API_URL,
+      target: process.env.DAYTONA_TARGET,
+    },
   };
 };
 

@@ -70,6 +70,11 @@ export interface AdeptConfig {
     clientSecret?: string;
     redirectUri?: string;
   };
+  daytona?: {
+    apiKey?: string;
+    apiUrl?: string;
+    target?: string;
+  };
 }
 
 export const MessageSchema = z.object({

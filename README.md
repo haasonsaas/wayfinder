@@ -108,6 +108,11 @@ What's our current sales pipeline looking like?
 - "What PRs need review?"
 - "Show me open bugs"
 
+**Code Execution (Daytona):**
+- "Calculate the compound interest on $10,000 at 5% for 10 years"
+- "Write a Python script to parse this CSV data"
+- "Run this code and tell me the output"
+
 ## Architecture
 
 ```
@@ -123,7 +128,8 @@ src/
 │   ├── base.ts            # Base integration class
 │   ├── salesforce.ts      # Salesforce CRM integration
 │   ├── google-drive.ts    # Google Drive integration
-│   └── github.ts          # GitHub integration
+│   ├── github.ts          # GitHub integration
+│   └── daytona.ts         # Daytona code execution sandbox
 ├── lib/
 │   ├── agent.ts           # AI Agent setup
 │   ├── command-builders.ts # Slack block builders

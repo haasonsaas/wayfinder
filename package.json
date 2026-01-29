@@ -25,6 +25,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.0",
     "@ai-sdk/openai": "^2.0.0",
+    "@daytonaio/sdk": "^0.136.0",
     "@octokit/rest": "^21.0.0",
     "@slack/bolt": "^4.1.0",
     "@slack/web-api": "^7.9.0",
