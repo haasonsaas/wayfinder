@@ -34,34 +34,56 @@ describe('generateResponse', () => {
 
   it('calls generateText with correct parameters', async () => {
     const mockGenerateText = vi.mocked(ai.generateText);
-    mockGenerateText.mockResolvedValue({
-      text: 'Hello world',
-      toolCalls: [],
-      toolResults: [],
-      finishReason: 'stop',
-      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-      logprobs: [],
-    } as any);
+    mockGenerateText
+      .mockResolvedValueOnce({
+        text: 'EXECUTION_HANDOFF\nStatus: done',
+        toolCalls: [],
+        toolResults: [],
+        finishReason: 'stop',
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        logprobs: [],
+      } as any)
+      .mockResolvedValueOnce({
+        text: 'Hello world',
+        toolCalls: [],
+        toolResults: [],
+        finishReason: 'stop',
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        logprobs: [],
+      } as any);
 
     const response = await generateResponse('Hi');
 
-    expect(mockGenerateText).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockGenerateText).toHaveBeenNthCalledWith(1, expect.objectContaining({
       prompt: 'Hi',
-      system: expect.stringContaining('You are Adept'),
+      system: expect.stringContaining('Adept Executor'),
+    }));
+    expect(mockGenerateText).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      system: expect.stringContaining('You are Adept, an AI assistant'),
+      messages: expect.any(Array),
     }));
     expect(response).toBe('Hello world');
   });
 
   it('converts markdown links to Slack format', async () => {
     const mockGenerateText = vi.mocked(ai.generateText);
-    mockGenerateText.mockResolvedValue({
-      text: 'Check [this link](https://example.com)',
-      toolCalls: [],
-      toolResults: [],
-      finishReason: 'stop',
-      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-      logprobs: [],
-    } as any);
+    mockGenerateText
+      .mockResolvedValueOnce({
+        text: 'EXECUTION_HANDOFF\nStatus: done',
+        toolCalls: [],
+        toolResults: [],
+        finishReason: 'stop',
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        logprobs: [],
+      } as any)
+      .mockResolvedValueOnce({
+        text: 'Check [this link](https://example.com)',
+        toolCalls: [],
+        toolResults: [],
+        finishReason: 'stop',
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        logprobs: [],
+      } as any);
 
     const response = await generateResponse('Link please');
     expect(response).toBe('Check <https://example.com|this link>');
@@ -69,26 +91,35 @@ describe('generateResponse', () => {
 
   it('handles tool status updates', async () => {
     const mockGenerateText = vi.mocked(ai.generateText);
-    mockGenerateText.mockImplementation(async ({ onStepFinish }) => {
-      // Simulate a tool call
-      if (onStepFinish) {
-        await onStepFinish({
-          toolCalls: [{ toolName: 'test_tool', args: {} }] as any,
-          toolResults: [{ toolName: 'test_tool', result: 'ok' }] as any,
-          text: '',
-          finishReason: 'tool-calls',
+    mockGenerateText
+      .mockImplementationOnce(async ({ onStepFinish }) => {
+        // Simulate a tool call
+        if (onStepFinish) {
+          await onStepFinish({
+            toolCalls: [{ toolName: 'test_tool', args: {} }] as any,
+            toolResults: [{ toolName: 'test_tool', result: 'ok' }] as any,
+            text: '',
+            finishReason: 'tool-calls',
+            usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          });
+        }
+        return {
+          text: 'EXECUTION_HANDOFF\nStatus: done',
+          toolCalls: [],
+          toolResults: [],
+          finishReason: 'stop',
           usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-        });
-      }
-      return {
+          logprobs: [],
+        } as any;
+      })
+      .mockResolvedValueOnce({
         text: 'Done',
         toolCalls: [],
         toolResults: [],
         finishReason: 'stop',
         usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
         logprobs: [],
-      } as any;
-    });
+      } as any);
 
     const onStatusUpdate = vi.fn();
     await generateResponse('Do something', onStatusUpdate);

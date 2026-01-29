@@ -14,7 +14,37 @@ import { rateLimiter } from './rate-limiter.js';
 import { toolRecorder } from './tool-recorder.js';
 import { logger } from './logger.js';
 
-const buildSystemInstructions = () => `You are Adept, an AI assistant for business operations and execution. You help teams work faster by:
+const buildExecutorInstructions = () => `You are Adept Executor, an internal execution engine for Adept. You do not talk to the user.
+
+Mission:
+- Use tools to gather information and perform actions.
+- If multiple systems might contain the answer, search them in parallel.
+- If you need a capability, use tool_registry_search to find the right tool.
+- Never fabricate tool results, IDs, links, or outcomes.
+- If required tools are unavailable, mark the request as blocked and explain what is missing.
+
+Output:
+Return a single execution handoff in the exact format below. Use plain text (no markdown tables).
+If a section has nothing, write "none".
+
+EXECUTION_HANDOFF
+Status: <done|needs_info|blocked>
+Actions:
+- <action summary with IDs/links>
+Data:
+- <facts with sources>
+Errors:
+- <tool errors with hints>
+Missing:
+- <required info or tools>
+Follow-up:
+- <single user question or "none">
+Draft:
+- <optional short response or "none">
+
+Current date: ${new Date().toISOString().split('T')[0]}`;
+
+const buildPresenterInstructions = () => `You are Adept, an AI assistant for business operations and execution. You help teams work faster by:
 - Answering questions using data from connected business systems
 - Executing workflows across multiple tools
 - Providing insights without users needing to open separate apps
@@ -32,6 +62,7 @@ Response style (Slack):
 - Include identifiers/links (issue keys, PR numbers, doc links) when available.
 - Avoid duplicates: check for existing items before creating new tickets/issues.
 - When asked to implement or fix something, create a PR if repository tools are available and include a short "The fix:" bullet list.
+- If required tools are unavailable or a tool search yields no results, say so and offer the next best step (e.g., ask to connect an integration or provide manual instructions).
 - Always cite sources when using data from integrations.
 - Format responses for Slack (use *bold*, _italic_, bullet points).
 
@@ -46,6 +77,29 @@ When asked about a person, company, or deal:
 3. Highlight the most relevant details for the user's context.
 
 You have access to tools from connected integrations. Use them proactively to gather context.`;
+
+const buildPresenterMessages = (input: GenerationInput, handoff: string) => {
+  const baseMessages =
+    'prompt' in input
+      ? [{ role: 'user' as const, content: input.prompt }]
+      : input.messages.map((message) => ({
+          role: message.role,
+          content: message.content,
+        }));
+
+  return [
+    ...baseMessages,
+    {
+      role: 'assistant' as const,
+      content: `EXECUTION HANDOFF:\n${handoff}`,
+    },
+    {
+      role: 'user' as const,
+      content:
+        'Using the execution handoff above, respond to the user. Do not mention the handoff or internal tools. If a follow-up question is required, ask it directly.',
+    },
+  ];
+};
 
 const formatToolNames = (toolNames: string[]): string | null => {
   const unique = Array.from(
@@ -122,9 +176,9 @@ const generateTextResponse = async (
 
   logger.info({ requestId }, '[Agent] Request started');
 
-  const { text } = await generateText({
+  const executorResponse = await generateText({
     model,
-    system: buildSystemInstructions(),
+    system: buildExecutorInstructions(),
     ...request,
     tools,
     stopWhen: stepCountIs(config.maxToolSteps),
@@ -134,9 +188,18 @@ const generateTextResponse = async (
     },
   });
 
+  const presenterMessages = buildPresenterMessages(input, executorResponse.text);
+
+  const presenterResponse = await generateText({
+    model,
+    system: buildPresenterInstructions(),
+    messages: presenterMessages,
+    experimental_context: context,
+  });
+
   logger.info({ requestId }, '[Agent] Request completed');
 
-  return formatSlackText(text);
+  return formatSlackText(presenterResponse.text);
 };
 
 function getModel() {
