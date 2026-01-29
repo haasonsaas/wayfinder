@@ -1,4 +1,4 @@
-import { commandRegistry, type CommandResponse } from './command-registry.js';
+import { commandRegistry, type CommandContext, type CommandResponse } from './command-registry.js';
 import { integrationRegistry } from '../integrations/registry.js';
 import { loadConfig } from './config.js';
 import { tokenStore } from './token-store.js';
@@ -6,6 +6,8 @@ import type { IntegrationStatus } from './command-builders.js';
 import { buildIntegrationStatusBlocks, buildOnboardingBlocks } from './command-builders.js';
 import { buildOAuthStartUrl, buildSharedSecretParam, getOAuthBaseUrl } from './oauth.js';
 import { getIntegrationHealth } from './integration-config.js';
+import { workflowWizard } from './workflows/wizard.js';
+import { workflowService } from './workflows/service.js';
 
 const getOAuthStartUrl = async (integrationId: string): Promise<string | null> => {
   const integration = integrationRegistry.get(integrationId);
@@ -148,8 +150,88 @@ commandRegistry.register({
   },
 });
 
-export const handleCommand = async (text: string): Promise<CommandResponse | null> => {
-  return await commandRegistry.execute(text);
+commandRegistry.register({
+  name: 'workflow',
+  description: 'Create and manage workflows',
+  aliases: ['workflows'],
+  execute: async (args, context) => {
+    const trimmed = args.trim();
+    if (!trimmed) {
+      return (await workflowWizard.handleMessage('workflow', context)) ?? {
+        text: 'Type "workflow" to start a new workflow wizard.',
+      };
+    }
+
+    if (trimmed === 'list') {
+      const workflows = await workflowService.listWorkflows();
+      if (workflows.length === 0) {
+        return { text: 'No workflows found.' };
+      }
+      const lines = workflows.map((workflow) =>
+        `• ${workflow.name} (${workflow.id}) — ${workflow.trigger.type}`,
+      );
+      return { text: lines.join('\n') };
+    }
+
+    if (trimmed.startsWith('delete ')) {
+      const id = trimmed.replace('delete', '').trim();
+      if (!id) {
+        return { text: 'Provide a workflow ID to delete.' };
+      }
+      const deleted = await workflowService.deleteWorkflow(id);
+      return { text: deleted ? `Deleted workflow ${id}.` : `Workflow ${id} not found.` };
+    }
+
+    return { text: 'Unknown workflow command. Use "workflow", "workflow list", or "workflow delete <id>".' };
+  },
+});
+
+commandRegistry.register({
+  name: 'schedule',
+  description: 'Create and manage schedules',
+  aliases: ['schedules'],
+  execute: async (args, context) => {
+    const trimmed = args.trim();
+    if (!trimmed) {
+      return (await workflowWizard.handleMessage('schedule', context)) ?? {
+        text: 'Type "schedule" to start a new schedule wizard.',
+      };
+    }
+
+    if (trimmed === 'list') {
+      const workflows = await workflowService.listWorkflows();
+      const schedules = workflows.filter((workflow) => workflow.trigger.type === 'schedule');
+      if (schedules.length === 0) {
+        return { text: 'No schedules found.' };
+      }
+      const lines = schedules.map((workflow) =>
+        `• ${workflow.name} (${workflow.id}) — ${workflow.trigger.schedule?.cron ?? 'cron missing'}`,
+      );
+      return { text: lines.join('\n') };
+    }
+
+    if (trimmed.startsWith('delete ')) {
+      const id = trimmed.replace('delete', '').trim();
+      if (!id) {
+        return { text: 'Provide a schedule ID to delete.' };
+      }
+      const deleted = await workflowService.deleteWorkflow(id);
+      return { text: deleted ? `Deleted schedule ${id}.` : `Schedule ${id} not found.` };
+    }
+
+    return { text: 'Unknown schedule command. Use "schedule", "schedule list", or "schedule delete <id>".' };
+  },
+});
+
+export const handleCommand = async (
+  text: string,
+  context: CommandContext = {},
+): Promise<CommandResponse | null> => {
+  const wizardResponse = await workflowWizard.handleMessage(text, context);
+  if (wizardResponse) {
+    return wizardResponse;
+  }
+  return await commandRegistry.execute(text, context);
 };
 
 // Kept for backward compatibility if needed, but updated signature

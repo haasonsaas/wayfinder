@@ -67,6 +67,34 @@ export const buildOnboardingBlocks = (
     type: 'section',
     text: {
       type: 'mrkdwn',
+      text: '*Event triggers*\nWhen something happens, Adept takes action.\n• Fire on email, form submit, deal close, and more\n• Keyword & sender filtering\n• Webhook listeners\n• Conditional logic',
+    },
+  },
+  {
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: '*Data movement*\nData flows where it needs to go.\n• Sync records across systems\n• Download & upload files\n• Update Stripe on deal close\n• Route attachments',
+    },
+  },
+  {
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: '*Scheduled tasks*\nDefine once, runs forever in the background.\n• Standups, weekly reports\n• Monthly and quarterly rollups\n• Define once, runs forever\n• Timezone-aware scheduling',
+    },
+  },
+  {
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: '*Event processing*\nInbound emails trigger outbound actions.\n• Parse data from email bodies\n• Extract and process attachments\n• Vendor invoices to accounting\n• Candidate resumes to ATS',
+    },
+  },
+  {
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
       text: `*Connect integrations*\n${connectLinks.filter(Boolean).join('\n')}`,
     },
   },

@@ -1,6 +1,7 @@
 import type { KnownBlock } from '@slack/web-api';
 import { generateResponse, generateResponseWithHistory } from '../lib/agent.js';
 import { handleCommand } from '../lib/commands.js';
+import type { CommandContext } from '../lib/command-registry.js';
 
 type ConversationMessage = { role: 'user' | 'assistant'; content: string };
 
@@ -14,6 +15,7 @@ export interface AssistantFlowOptions {
   setInitialStatus?: boolean;
   sendResponse: (text: string, blocks?: KnownBlock[]) => Promise<void>;
   errorMessage: string;
+  commandContext?: CommandContext;
   onError?: (error: unknown) => void;
   onFinally?: () => Promise<void>;
 }
@@ -27,6 +29,7 @@ export const runAssistantFlow = async (options: AssistantFlowOptions): Promise<v
     setInitialStatus,
     sendResponse,
     errorMessage,
+    commandContext,
     onError,
     onFinally,
   } = options;
@@ -36,7 +39,7 @@ export const runAssistantFlow = async (options: AssistantFlowOptions): Promise<v
       await onStatusUpdate?.('is thinking...');
     }
 
-    const commandResponse = text ? await handleCommand(text) : null;
+    const commandResponse = text ? await handleCommand(text, commandContext) : null;
     if (commandResponse) {
       await sendResponse(commandResponse.text, commandResponse.blocks);
       return;

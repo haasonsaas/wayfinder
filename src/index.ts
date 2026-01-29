@@ -12,6 +12,7 @@ import {
 } from './types/slack.js';
 import { slackService } from './lib/slack.js';
 import { logger } from './lib/logger.js';
+import { workflowService } from './lib/workflows/service.js';
 
 const bootstrap = async () => {
   // Validate environment before starting
@@ -21,6 +22,8 @@ const bootstrap = async () => {
 
   // Register all integrations
   await registerAllIntegrations();
+
+  await workflowService.startScheduler();
 
   const config = loadConfig();
   logger.info(`[Adept] Starting with provider: ${config.defaultProvider}`);

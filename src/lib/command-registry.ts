@@ -3,6 +3,8 @@ import type { KnownBlock } from '@slack/web-api';
 export interface CommandContext {
   userId?: string;
   teamId?: string;
+  channelId?: string;
+  threadTs?: string;
 }
 
 export interface CommandResponse {

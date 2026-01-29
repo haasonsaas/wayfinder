@@ -5,7 +5,7 @@ import { DEFAULT_ERROR_MESSAGE, runAssistantFlow } from './assistant-flow.js';
 import type { KnownBlock } from '@slack/web-api';
 
 export async function handleAppMention(event: AppMentionEvent): Promise<void> {
-  const { channel, thread_ts, ts, text, bot_id } = event;
+  const { channel, thread_ts, ts, text, bot_id, user } = event;
   const botUserId = await slackService.getBotUserId();
 
   // Ignore messages from bots
@@ -56,6 +56,11 @@ export async function handleAppMention(event: AppMentionEvent): Promise<void> {
   await runAssistantFlow({
     text: cleanedText,
     threadTs: thread_ts,
+    commandContext: {
+      userId: user,
+      channelId: channel,
+      threadTs: thread_ts || ts,
+    },
     getThreadMessages: thread_ts
       ? () => slackService.getThreadMessages(channel, thread_ts, botUserId)
       : undefined,

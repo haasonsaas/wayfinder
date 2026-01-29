@@ -36,6 +36,7 @@ export interface AdeptConfig {
   defaultProvider: 'openai' | 'anthropic';
   enabledIntegrations: string[];
   maxToolSteps: number;
+  redisUrl?: string;
   slack: {
     botToken: string;
     signingSecret: string;

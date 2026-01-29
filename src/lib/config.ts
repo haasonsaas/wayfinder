@@ -27,6 +27,7 @@ const buildConfig = (): AdeptConfig => {
     defaultProvider: resolveDefaultProvider(),
     enabledIntegrations: (process.env.ENABLED_INTEGRATIONS || '').split(',').filter(Boolean),
     maxToolSteps: parseInt(process.env.MAX_TOOL_STEPS || '15', 10),
+    redisUrl: process.env.REDIS_URL,
     slack: {
       botToken: process.env.SLACK_BOT_TOKEN || '',
       signingSecret: process.env.SLACK_SIGNING_SECRET || '',

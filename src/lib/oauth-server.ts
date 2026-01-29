@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { integrationRegistry } from '../integrations/registry.js';
 import { loadConfig } from './config.js';
 import { logger } from './logger.js';
+import { handleWebhookRequest } from './webhooks.js';
 
 const STATE_TTL_MS = 10 * 60 * 1000;
 
@@ -19,7 +20,9 @@ const getSharedSecret = (url: URL, req: http.IncomingMessage): string | null => 
     return querySecret;
   }
 
-  const header = req.headers['x-adept-oauth-secret'];
+  const oauthHeader = req.headers['x-adept-oauth-secret'];
+  const webhookHeader = req.headers['x-adept-webhook-secret'];
+  const header = webhookHeader ?? oauthHeader;
   if (Array.isArray(header)) {
     return header[0] ?? null;
   }
@@ -195,7 +198,7 @@ export const startOAuthServer = () => {
   const { port, baseUrl, bindHost, allowRemote } = config.oauth;
 
   const server = http.createServer(async (req, res) => {
-    if (!req.url || req.method !== 'GET') {
+    if (!req.url || !req.method) {
       sendResponse(res, 404, renderHtml('Not found', 'Route not found.'));
       return;
     }
@@ -213,14 +216,50 @@ export const startOAuthServer = () => {
     const path = url.pathname;
 
     // Health check endpoint
-    if (path === '/health' || path === '/healthz') {
+    if (req.method === 'GET' && (path === '/health' || path === '/healthz')) {
       handleHealth(req, res);
+      return;
+    }
+
+    if (path.startsWith('/webhooks')) {
+      if (req.method !== 'POST') {
+        sendResponse(res, 405, renderHtml('Method not allowed', 'Use POST for webhook events.'));
+        return;
+      }
+
+      if (!isSharedSecretValid(url, req)) {
+        sendResponse(res, 401, renderHtml('Unauthorized', 'Missing or invalid shared secret.'));
+        return;
+      }
+
+      if (path === '/webhooks/email') {
+        await handleWebhookRequest(req, res, 'email');
+        return;
+      }
+
+      if (path === '/webhooks/form') {
+        await handleWebhookRequest(req, res, 'form_submit');
+        return;
+      }
+
+      if (path === '/webhooks/deal-close') {
+        await handleWebhookRequest(req, res, 'deal_close');
+        return;
+      }
+
+      if (path === '/webhooks/events' || path === '/webhooks/custom') {
+        await handleWebhookRequest(req, res, 'webhook');
+        return;
+      }
+
+      await handleWebhookRequest(req, res);
       return;
     }
 
     const parts = path.split('/').filter(Boolean); // ['oauth', 'integrationId', 'action']
 
     if (
+      req.method === 'GET' &&
       parts.length === 3 &&
       parts[0] === 'oauth' &&
       (parts[2] === 'start' || parts[2] === 'callback')
