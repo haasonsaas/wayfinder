@@ -76,6 +76,23 @@ export interface AdeptConfig {
     apiUrl?: string;
     target?: string;
   };
+  scim?: {
+    token?: string;
+  };
+  sso?: {
+    google?: {
+      clientId?: string;
+      clientSecret?: string;
+      redirectUri?: string;
+      allowedDomains?: string[];
+    };
+  };
+  monitoring?: {
+    alertChannelId?: string;
+    minSeverity?: 'low' | 'medium' | 'high';
+    minIntervalMinutes?: number;
+    driftAlertsEnabled?: boolean;
+  };
 }
 
 export const MessageSchema = z.object({

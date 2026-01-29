@@ -11,6 +11,7 @@ import { auditLogger } from './audit-log.js';
 import { approvalGates } from './approval-gates.js';
 import { outcomeMonitor } from './outcome-monitor.js';
 import { rateLimiter } from './rate-limiter.js';
+import { toolRecorder } from './tool-recorder.js';
 import { logger } from './logger.js';
 
 const buildSystemInstructions = () => `You are Adept, an AI assistant for business operations. You help teams work faster by:
@@ -240,6 +241,13 @@ const wrapToolExecution = (
         inputs,
         sessionId,
         workspaceId,
+      );
+
+      toolRecorder.recordToolCall(
+        { userId, channelId: execContext.channelId, threadTs: sessionId },
+        toolName,
+        integrationId,
+        inputs,
       );
 
       try {

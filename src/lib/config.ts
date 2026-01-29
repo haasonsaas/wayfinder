@@ -22,6 +22,11 @@ const resolveDefaultProvider = (): AdeptConfig['defaultProvider'] => {
 const buildConfig = (): AdeptConfig => {
   const oauthPort = Number(process.env.OAUTH_PORT || 3999);
   const oauthBaseUrl = process.env.OAUTH_BASE_URL || `http://localhost:${oauthPort}`;
+  const monitoringSeverity = process.env.MONITORING_MIN_SEVERITY?.toLowerCase();
+  const ssoDomains = (process.env.SSO_GOOGLE_ALLOWED_DOMAINS || '')
+    .split(',')
+    .map((domain) => domain.trim())
+    .filter(Boolean);
 
   return {
     defaultProvider: resolveDefaultProvider(),
@@ -66,6 +71,30 @@ const buildConfig = (): AdeptConfig => {
       apiKey: process.env.DAYTONA_API_KEY,
       apiUrl: process.env.DAYTONA_API_URL,
       target: process.env.DAYTONA_TARGET,
+    },
+    scim: {
+      token: process.env.SCIM_TOKEN,
+    },
+    sso: {
+      google: {
+        clientId: process.env.SSO_GOOGLE_CLIENT_ID,
+        clientSecret: process.env.SSO_GOOGLE_CLIENT_SECRET,
+        redirectUri: process.env.SSO_GOOGLE_REDIRECT_URI,
+        allowedDomains: ssoDomains.length > 0 ? ssoDomains : undefined,
+      },
+    },
+    monitoring: {
+      alertChannelId: process.env.MONITORING_ALERT_CHANNEL_ID,
+      minSeverity:
+        monitoringSeverity === 'low' || monitoringSeverity === 'medium' || monitoringSeverity === 'high'
+          ? monitoringSeverity
+          : undefined,
+      minIntervalMinutes: process.env.MONITORING_MIN_INTERVAL_MINUTES
+        ? Number(process.env.MONITORING_MIN_INTERVAL_MINUTES)
+        : undefined,
+      driftAlertsEnabled: process.env.MONITORING_DRIFT_ALERTS_ENABLED
+        ? process.env.MONITORING_DRIFT_ALERTS_ENABLED === 'true'
+        : undefined,
     },
   };
 };

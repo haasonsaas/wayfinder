@@ -13,17 +13,21 @@ import {
 import { slackService } from './lib/slack.js';
 import { logger } from './lib/logger.js';
 import { workflowService } from './lib/workflows/service.js';
+import { monitoringService } from './lib/monitoring-service.js';
+import { approvalGates } from './lib/approval-gates.js';
 
 const bootstrap = async () => {
   // Validate environment before starting
   validateEnv();
 
   await tokenStore.load();
+  await approvalGates.loadConfig();
 
   // Register all integrations
   await registerAllIntegrations();
 
   await workflowService.startScheduler();
+  monitoringService.start();
 
   const config = loadConfig();
   logger.info(`[Adept] Starting with provider: ${config.defaultProvider}`);

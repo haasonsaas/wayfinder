@@ -4,6 +4,8 @@ import { integrationRegistry } from '../integrations/registry.js';
 import { loadConfig } from './config.js';
 import { logger } from './logger.js';
 import { handleWebhookRequest } from './webhooks.js';
+import { handleScimRequest } from './scim.js';
+import { handleGoogleSsoRequest } from './sso-google.js';
 
 const STATE_TTL_MS = 10 * 60 * 1000;
 
@@ -218,6 +220,16 @@ export const startOAuthServer = () => {
     // Health check endpoint
     if (req.method === 'GET' && (path === '/health' || path === '/healthz')) {
       handleHealth(req, res);
+      return;
+    }
+
+    if (path.startsWith('/scim/')) {
+      await handleScimRequest(req, res, url);
+      return;
+    }
+
+    if (path.startsWith('/sso/google')) {
+      await handleGoogleSsoRequest(req, res, baseUrl, url);
       return;
     }
 

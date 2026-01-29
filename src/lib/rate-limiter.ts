@@ -60,6 +60,14 @@ export class RateLimiter {
     this.customLimits.set(config.tool, config);
   }
 
+  getLimitConfig(tool: string): RateLimitConfig {
+    return this.getLimit(tool);
+  }
+
+  listLimits(): RateLimitConfig[] {
+    return Array.from(this.customLimits.values());
+  }
+
   private getLimit(tool: string): RateLimitConfig {
     return this.customLimits.get(tool) || DEFAULT_LIMITS;
   }

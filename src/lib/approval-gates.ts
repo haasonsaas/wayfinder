@@ -50,6 +50,7 @@ const SENSITIVE_TOOLS = [
 export class ApprovalGateManager {
   private store = new RedisJsonStore<ApprovalGate>('adept:approval_gates');
   private pendingStore = new RedisJsonStore<string[]>('adept:pending_approvals');
+  private configStore = new RedisJsonStore<ApprovalConfig>('adept:approval_config');
   private config: ApprovalConfig = {
     requireApprovalFor: {
       methods: ['DELETE'],
@@ -59,6 +60,18 @@ export class ApprovalGateManager {
 
   configure(config: Partial<ApprovalConfig>): void {
     this.config = { ...this.config, ...config };
+    void this.configStore.set('config', this.config);
+  }
+
+  async loadConfig(): Promise<void> {
+    const stored = await this.configStore.get('config');
+    if (stored) {
+      this.config = stored;
+    }
+  }
+
+  getConfig(): ApprovalConfig {
+    return this.config;
   }
 
   requiresApproval(tool: string, integrationId: string, inputs: Record<string, unknown>): boolean {
