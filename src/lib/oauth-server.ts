@@ -111,6 +111,11 @@ const redirect = (res: http.ServerResponse, url: string) => {
   res.end();
 };
 
+const handleHealth = (_req: http.IncomingMessage, res: http.ServerResponse) => {
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }));
+};
+
 const handleStart = async (integrationId: string, baseUrl: string, res: http.ServerResponse) => {
   const integration = integrationRegistry.get(integrationId);
   const state = createState(integrationId);
@@ -206,6 +211,13 @@ export const startOAuthServer = () => {
 
     const url = new URL(req.url, baseUrl);
     const path = url.pathname;
+
+    // Health check endpoint
+    if (path === '/health' || path === '/healthz') {
+      handleHealth(req, res);
+      return;
+    }
+
     const parts = path.split('/').filter(Boolean); // ['oauth', 'integrationId', 'action']
 
     if (

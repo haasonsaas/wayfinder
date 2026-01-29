@@ -83,11 +83,22 @@ export class TokenStore {
   private storePath: string;
   private secret?: string;
   private autoEncrypt: boolean;
+  private warnedUnencrypted = false;
 
   constructor(options: TokenStoreOptions = {}) {
     this.storePath = options.storePath || process.env.TOKEN_STORE_PATH || DEFAULT_STORE_PATH;
     this.secret = options.secret || process.env.TOKEN_STORE_SECRET;
     this.autoEncrypt = options.autoEncrypt ?? true;
+  }
+
+  private warnIfUnencrypted(): void {
+    if (!this.secret && !this.warnedUnencrypted) {
+      this.warnedUnencrypted = true;
+      console.warn(
+        '[TokenStore] WARNING: TOKEN_STORE_SECRET is not set. Tokens will be stored in plaintext. ' +
+        'Set TOKEN_STORE_SECRET environment variable to enable encryption.',
+      );
+    }
   }
 
   async load(): Promise<void> {
@@ -139,6 +150,7 @@ export class TokenStore {
   }
 
   async setTokens<T extends Record<string, unknown>>(integrationId: string, tokens: T): Promise<void> {
+    this.warnIfUnencrypted();
     await this.load();
     if (!this.cache) {
       this.cache = {};

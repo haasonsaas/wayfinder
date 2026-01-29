@@ -17,10 +17,25 @@ export async function handleAppMention(event: AppMentionEvent): Promise<void> {
 
   // Post initial "thinking" message
   const threadTs = thread_ts || ts;
-  const thinkingTs = await slackService.postMessage(channel, '_is thinking..._', threadTs);
+  let thinkingTs: string | undefined;
+
+  try {
+    thinkingTs = await slackService.postMessage(channel, '_is thinking..._', threadTs);
+  } catch (error) {
+    logger.error({ error, channel, threadTs }, '[AppMention] Failed to post thinking message');
+  }
 
   if (!thinkingTs) {
-    logger.error({ channel, threadTs }, '[AppMention] Failed to post thinking message');
+    // Fallback: try to reply without the thinking message
+    logger.warn({ channel, threadTs }, '[AppMention] Proceeding without thinking message');
+    try {
+      const response = await import('../lib/agent.js').then((m) =>
+        m.generateResponse(text.replace(new RegExp(`<@${botUserId}>\\s*`, 'g'), '').trim()),
+      );
+      await slackService.postMessage(channel, response, threadTs);
+    } catch (fallbackError) {
+      logger.error({ error: fallbackError, channel, threadTs }, '[AppMention] Fallback also failed');
+    }
     return;
   }
 
