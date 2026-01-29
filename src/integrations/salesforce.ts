@@ -252,6 +252,11 @@ export class SalesforceIntegration extends BaseIntegration {
   description = 'Access Salesforce contacts, accounts, and opportunities';
   icon = '☁️';
 
+  isEnabled(): boolean {
+    const config = loadConfig();
+    return !!(config.salesforce?.clientId && config.salesforce?.clientSecret);
+  }
+
   private client?: SalesforceClient;
   private clientKey?: string;
 

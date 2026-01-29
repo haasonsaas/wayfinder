@@ -187,6 +187,14 @@ export class GitHubIntegration extends BaseIntegration {
   description = 'Access GitHub repositories, issues, and pull requests';
   icon = '🐙';
 
+  isEnabled(): boolean {
+    const config = loadConfig();
+    return !!(
+      (process.env.GITHUB_OAUTH_TOKEN || process.env.GITHUB_TOKEN) ||
+      (config.github?.oauthClientId && config.github?.oauthClientSecret)
+    );
+  }
+
   getAuthConfig() {
     return {
       getAuthUrl: (baseUrl: string, state: string) => {

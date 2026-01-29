@@ -136,6 +136,11 @@ export class GoogleDriveIntegration extends BaseIntegration {
   description = 'Search and read Google Drive files and documents';
   icon = '📂';
 
+  isEnabled(): boolean {
+    const config = loadConfig();
+    return !!(config.googleDrive?.clientId && config.googleDrive?.clientSecret);
+  }
+
   private client?: DriveClient;
   private clientKey?: string;
 
