@@ -112,22 +112,31 @@ What's our current sales pipeline looking like?
 
 ```
 src/
-├── index.ts              # Slack app entry point
-├── handlers/             # Slack event handlers
-│   ├── app-mention.ts    # @mention handling
-│   └── direct-message.ts # DM handling
-├── integrations/         # Business tool integrations
-│   ├── registry.ts       # Integration registry
-│   ├── base.ts           # Base integration class
-│   ├── crm.ts            # CRM integration (mock data)
-│   ├── analytics.ts      # Analytics integration (mock data)
-│   └── github.ts         # GitHub integration (mock data)
+├── index.ts               # Slack app entry point
+├── handlers/              # Slack event handlers
+│   ├── app-mention.ts     # @mention handling
+│   ├── assistant-flow.ts  # Unified assistant logic
+│   └── direct-message.ts  # DM handling
+├── integrations/          # Business tool integrations
+│   ├── index.ts           # Integration registration
+│   ├── registry.ts        # Integration registry
+│   ├── base.ts            # Base integration class
+│   ├── salesforce.ts      # Salesforce CRM integration
+│   ├── google-drive.ts    # Google Drive integration
+│   └── github.ts          # GitHub integration
 ├── lib/
-│   ├── agent.ts          # ToolLoopAgent setup
-│   ├── config.ts         # Configuration loading
-│   └── slack.ts          # Slack API utilities
+│   ├── agent.ts           # AI Agent setup
+│   ├── command-builders.ts # Slack block builders
+│   ├── config.ts          # Configuration loading
+│   ├── integration-config.ts # Integration health & config
+│   ├── oauth.ts           # OAuth utilities
+│   ├── oauth-server.ts    # OAuth callback server
+│   ├── retry.ts           # Retry logic
+│   ├── slack.ts           # Slack API utilities
+│   ├── token-store.ts     # Token management
+│   └── logger.ts          # Pino logger setup
 └── types/
-    └── index.ts          # TypeScript types
+    └── index.ts           # Shared types
 ```
 
 ## Adding Custom Integrations
