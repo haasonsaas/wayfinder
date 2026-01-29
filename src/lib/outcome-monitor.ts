@@ -245,6 +245,10 @@ export class OutcomeMonitor {
     return anomalies;
   }
 
+  async getLatestAnomalies(): Promise<Anomaly[]> {
+    return (await this.anomaliesStore.get('latest')) || [];
+  }
+
   async getDriftReport(tool: string, integrationId: string): Promise<DriftReport | null> {
     const dayMetrics = await this.getMetrics(tool, integrationId, 'day');
     const weekMetrics = await this.getMetrics(tool, integrationId, 'week');

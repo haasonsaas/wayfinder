@@ -11,7 +11,7 @@ import { workflowService } from './workflows/service.js';
 import { toolRegistry } from './tool-registry.js';
 import { toolStorage } from './tool-storage.js';
 import { auditLogger } from './audit-log.js';
-import { outcomeMonitor } from './outcome-monitor.js';
+import { outcomeMonitor, type DriftReport } from './outcome-monitor.js';
 import { approvalGates } from './approval-gates.js';
 import { rateLimiter } from './rate-limiter.js';
 import { toolRecorder } from './tool-recorder.js';
@@ -482,6 +482,7 @@ commandRegistry.register({
     const parts = args.trim().split(/\s+/).filter(Boolean);
     const subcommand = parts[0] ?? 'status';
     const config = await monitoringStore.getConfig();
+    const severityRank: Record<'low' | 'medium' | 'high', number> = { low: 1, medium: 2, high: 3 };
 
     if (subcommand === 'status') {
       return {
@@ -542,17 +543,62 @@ commandRegistry.register({
       return { text: `Alert interval set to ${minutes} minutes.` };
     }
 
-    if (subcommand === 'drift') {
-      const mode = parts[1];
-      if (!mode || !['on', 'off'].includes(mode)) {
-        return { text: 'Usage: monitoring drift [on|off]' };
+    if (subcommand === 'anomalies') {
+      let anomalies = await outcomeMonitor.getLatestAnomalies();
+      if (anomalies.length === 0) {
+        anomalies = await outcomeMonitor.detectAnomalies();
       }
-      const next = { ...config, driftAlertsEnabled: mode === 'on' };
-      await monitoringStore.setConfig(next);
-      return { text: `Drift alerts ${mode === 'on' ? 'enabled' : 'disabled'}.` };
+
+      const minRank = severityRank[config.minSeverity];
+      const filtered = anomalies.filter((anomaly) => severityRank[anomaly.severity] >= minRank);
+
+      if (filtered.length === 0) {
+        return { text: 'No anomalies detected.' };
+      }
+
+      const lines = filtered.slice(0, 10).map(
+        (anomaly) => `• ${anomaly.tool} (${anomaly.integrationId}) — ${anomaly.description} [${anomaly.severity}]`,
+      );
+
+      return { text: `Detected anomalies:\n${lines.join('\n')}` };
     }
 
-    return { text: 'Usage: monitoring [status|enable|disable|channel|severity|interval|drift]' };
+    if (subcommand === 'drift') {
+      const mode = parts[1];
+      if (mode === 'on' || mode === 'off') {
+        const next = { ...config, driftAlertsEnabled: mode === 'on' };
+        await monitoringStore.setConfig(next);
+        return { text: `Drift alerts ${mode === 'on' ? 'enabled' : 'disabled'}.` };
+      }
+
+      const metrics = await outcomeMonitor.getAllMetrics('day');
+      const reports = [] as DriftReport[];
+
+      for (const metric of metrics) {
+        const report = await outcomeMonitor.getDriftReport(metric.tool, metric.integrationId);
+        if (report?.isSignificant) {
+          reports.push(report);
+        }
+      }
+
+      if (reports.length === 0) {
+        return { text: 'No significant drift signals detected.' };
+      }
+
+      const lines = reports.slice(0, 10).map((report) => {
+        const changes = [
+          `success ${Math.round(report.successRateChange * 100)}%`,
+          `latency ${Math.round(report.avgDurationChange * 100)}%`,
+          `volume ${Math.round(report.volumeChange * 100)}%`,
+        ];
+        const errors = report.newErrorTypes.length > 0 ? `new errors: ${report.newErrorTypes.join(', ')}` : 'no new errors';
+        return `• ${report.tool} (${report.integrationId}) — ${changes.join(', ')}, ${errors}`;
+      });
+
+      return { text: `Drift signals:\n${lines.join('\n')}` };
+    }
+
+    return { text: 'Usage: monitoring [status|enable|disable|channel|severity|interval|anomalies|drift]' };
   },
 });
 
@@ -826,22 +872,76 @@ commandRegistry.register({
 commandRegistry.register({
   name: 'approvals',
   description: 'View pending approvals',
-  execute: async (_, context) => {
-    const pending = await approvalGates.listPending(context.teamId);
+  execute: async (args, context) => {
+    const parts = args.trim().split(/\s+/).filter(Boolean);
+    const action = parts[0] ?? 'list';
 
-    if (pending.length === 0) {
-      return { text: 'No pending approvals.' };
+    if (action === 'list') {
+      const pending = await approvalGates.listPending(context.teamId);
+
+      if (pending.length === 0) {
+        return { text: 'No pending approvals.' };
+      }
+
+      const lines = ['*Pending Approvals*', ''];
+      for (const gate of pending) {
+        lines.push(
+          `• *${gate.tool}* requested by <@${gate.requestedBy}>`,
+          `  ID: ${gate.id.slice(0, 8)}... | Expires: ${new Date(gate.expiresAt).toLocaleString()}`,
+        );
+      }
+
+      return { text: lines.join('\n') };
     }
 
-    const lines = ['*Pending Approvals*', ''];
-    for (const gate of pending) {
-      lines.push(
-        `• *${gate.tool}* requested by <@${gate.requestedBy}>`,
-        `  ID: ${gate.id.slice(0, 8)}... | Expires: ${new Date(gate.expiresAt).toLocaleString()}`,
-      );
+    if (action === 'status') {
+      const gateId = parts[1];
+      if (!gateId) {
+        return { text: 'Usage: approvals status <id>' };
+      }
+      const gate = await approvalGates.checkApproval(gateId);
+      if (!gate) {
+        return { text: 'Approval request not found.' };
+      }
+      return {
+        text: `Approval ${gate.id.slice(0, 8)}... is ${gate.status} for ${gate.tool} (${gate.integrationId}).`,
+      };
     }
 
-    return { text: lines.join('\n') };
+    if (action === 'approve') {
+      const gateId = parts[1];
+      if (!gateId) {
+        return { text: 'Usage: approvals approve <id>' };
+      }
+      if (!context.userId) {
+        return { text: 'Approver user ID not available.' };
+      }
+      try {
+        const gate = await approvalGates.approve(gateId, context.userId);
+        return { text: `Approved ${gate.tool} (${gate.id.slice(0, 8)}...).` };
+      } catch (error) {
+        return { text: `Unable to approve: ${error instanceof Error ? error.message : String(error)}` };
+      }
+    }
+
+    if (action === 'reject') {
+      const gateId = parts[1];
+      const reason = parts.slice(2).join(' ').trim();
+      if (!gateId) {
+        return { text: 'Usage: approvals reject <id> [reason]' };
+      }
+      if (!context.userId) {
+        return { text: 'Rejector user ID not available.' };
+      }
+      try {
+        const gate = await approvalGates.reject(gateId, context.userId, reason || undefined);
+        return { text: `Rejected ${gate.tool} (${gate.id.slice(0, 8)}...).` };
+      } catch (error) {
+        return { text: `Unable to reject: ${error instanceof Error ? error.message : String(error)}` };
+      }
+    }
+
+    return { text: 'Usage: approvals [list|status|approve|reject] [args]' };
   },
 });
 

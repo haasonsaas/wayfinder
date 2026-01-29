@@ -11,6 +11,17 @@ vi.mock('../src/lib/config.js', () => ({
       allowRemote: false,
       sharedSecret: undefined,
     },
+    scim: {
+      token: undefined,
+    },
+    sso: {
+      google: {
+        clientId: 'google-client-id',
+        clientSecret: 'google-client-secret',
+        redirectUri: 'http://localhost:3999/sso/google/callback',
+        allowedDomains: [],
+      },
+    },
   }),
 }));
 
@@ -109,6 +120,30 @@ describe('OAuth Server', () => {
     expect(response.status).toBe(302);
     expect(response.headers.location).toContain('https://auth.example.com/authorize');
     expect(response.headers.location).toContain('state=');
+  });
+
+  it('redirects to Google SSO login', async () => {
+    server = startOAuthServer();
+    await new Promise((r) => setTimeout(r, 50));
+
+    const response = await makeRequest(server, '/sso/google/login');
+
+    expect(response.status).toBe(302);
+    expect(response.headers.location).toContain('accounts.google.com');
+    expect(response.headers.location).toContain('client_id=google-client-id');
+    expect(response.headers.location).toContain('state=');
+  });
+
+  it('returns SCIM user list', async () => {
+    server = startOAuthServer();
+    await new Promise((r) => setTimeout(r, 50));
+
+    const response = await makeRequest(server, '/scim/v2/Users');
+    const payload = JSON.parse(response.body) as { schemas?: string[]; Resources?: unknown[] };
+
+    expect(response.status).toBe(200);
+    expect(payload.schemas).toContain('urn:ietf:params:scim:api:messages:2.0:ListResponse');
+    expect(payload.Resources).toBeDefined();
   });
 
   it('returns 404 for unknown integration on start', async () => {
